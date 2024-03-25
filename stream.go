@@ -314,6 +314,7 @@ func (s *Stream) sendClose() error {
 // Close is used to close the stream
 func (s *Stream) Close() error {
 	closeStream := false
+	sentClose := false
 	s.stateLock.Lock()
 	switch s.state {
 	// Opened means we need to signal a close
@@ -323,18 +324,18 @@ func (s *Stream) Close() error {
 		fallthrough
 	case streamEstablished:
 		s.state = streamLocalClose
-		goto SEND_CLOSE
-
+		goto HANDLE_CLOSE
 	case streamCloseWrite:
 		// If we've already closed the write side, so we just need to
 		// close the read side and transition to streamLocalClose.
 		s.state = streamLocalClose
-		goto CLOSE_WRITE_CLOSE
+		sentClose = true
+		goto HANDLE_CLOSE
 	case streamLocalClose:
 	case streamRemoteClose:
 		s.state = streamClosed
 		closeStream = true
-		goto SEND_CLOSE
+		goto HANDLE_CLOSE
 
 	case streamClosed:
 	case streamReset:
@@ -343,7 +344,7 @@ func (s *Stream) Close() error {
 	}
 	s.stateLock.Unlock()
 	return nil
-SEND_CLOSE:
+HANDLE_CLOSE:
 	// This shouldn't happen (the more realistic scenario to cancel the
 	// timer is via processFlags) but just in case this ever happens, we
 	// cancel the timer to prevent dangling timers.
@@ -366,34 +367,13 @@ SEND_CLOSE:
 	}
 
 	s.stateLock.Unlock()
-	s.sendClose()
+	if !sentClose {
+		s.sendClose()
+	}
 	s.notifyWaiting()
 	if closeStream {
 		s.session.closeStream(s.id)
 	}
-	return nil
-
-CLOSE_WRITE_CLOSE:
-	// This shouldn't happen (the more realistic scenario to cancel the
-	// timer is via processFlags) but just in case this ever happens, we
-	// cancel the timer to prevent dangling timers.
-	if s.closeTimer != nil {
-		s.closeTimer.Stop()
-		s.closeTimer = nil
-	}
-
-	// If we have a StreamCloseTimeout set we start the timeout timer.
-	// This prevents memory leaks if one side (this side) closes and the
-	// remote side poorly behaves and never responds with a FIN to complete
-	// the close. After the specified timeout, we clean our resources up no
-	// matter what.
-	if s.session.config.StreamCloseTimeout > 0 {
-		s.closeTimer = time.AfterFunc(
-			s.session.config.StreamCloseTimeout, s.closeTimeout)
-	}
-
-	s.stateLock.Unlock()
-	s.notifyWaiting()
 	return nil
 }
 
