@@ -326,7 +326,7 @@ func (s *Stream) Close() error {
 		s.state = streamLocalClose
 		goto HANDLE_CLOSE
 	case streamCloseWrite:
-		// If we've already closed the write side, so we just need to
+		// If we've already closed the write side, we just need to
 		// close the read side and transition to streamLocalClose.
 		s.state = streamLocalClose
 		sentClose = true
