@@ -374,7 +374,7 @@ SEND_CLOSE:
 	return nil
 
 CLOSE_WRITE_CLOSE:
-	if !closeStream && s.session.config.StreamCloseTimeout > 0 {
+	if s.session.config.StreamCloseTimeout > 0 {
 		s.closeTimer = time.AfterFunc(
 			s.session.config.StreamCloseTimeout, s.closeTimeout)
 	}
