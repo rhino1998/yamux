@@ -374,6 +374,19 @@ SEND_CLOSE:
 	return nil
 
 CLOSE_WRITE_CLOSE:
+	// This shouldn't happen (the more realistic scenario to cancel the
+	// timer is via processFlags) but just in case this ever happens, we
+	// cancel the timer to prevent dangling timers.
+	if s.closeTimer != nil {
+		s.closeTimer.Stop()
+		s.closeTimer = nil
+	}
+
+	// If we have a StreamCloseTimeout set we start the timeout timer.
+	// This prevents memory leaks if one side (this side) closes and the
+	// remote side poorly behaves and never responds with a FIN to complete
+	// the close. After the specified timeout, we clean our resources up no
+	// matter what.
 	if s.session.config.StreamCloseTimeout > 0 {
 		s.closeTimer = time.AfterFunc(
 			s.session.config.StreamCloseTimeout, s.closeTimeout)
